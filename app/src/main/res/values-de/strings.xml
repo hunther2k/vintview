@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="open_with_label">Mit Vintview ansehen</string>
+    <string name="share_title">Teilen</string>
+    <string name="open_with_title">Öffnen mit</string>
+    <string name="no_app">Keine App für diese Datei gefunden.</string>
+</resources>

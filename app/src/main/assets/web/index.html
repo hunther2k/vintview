@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Vintview</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header id="bar">
+  <button id="btnBack" class="icon" hidden data-i18n-title="back">
+    <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <div id="title">
+    <div class="name">Vintview</div>
+    <div class="sub"></div>
+  </div>
+  <button id="btnShare" class="icon" hidden data-i18n-title="share">
+    <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+  </button>
+  <button id="btnMenu" class="icon" data-i18n-title="menu">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" class="fill"/><circle cx="12" cy="12" r="1.4" class="fill"/><circle cx="12" cy="19" r="1.4" class="fill"/></svg>
+    <span class="dot" hidden></span>
+  </button>
+</header>
+
+<main>
+  <section id="home">
+    <div class="hero">
+      <div class="logo">
+        <svg viewBox="0 0 108 108"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2ec4b6"/><stop offset="1" stop-color="#14606a"/></linearGradient></defs><rect width="108" height="108" rx="26" fill="url(#lg)"/><path fill="#fff" d="M38,31h24l10,10v34a2,2 0,0 1,-2,2h-32a2,2 0,0 1,-2,-2v-42a2,2 0,0 1,2,-2z"/><path fill="#cdefea" d="M62,31v8a2,2 0,0 0,2,2h8z"/><path fill="#9aa5b1" d="M43,44h16a1.5,1.5 0,0 1,0,3h-16a1.5,1.5 0,0 1,0,-3zM43,50h22a1.5,1.5 0,0 1,0,3h-22a1.5,1.5 0,0 1,0,-3z"/><path fill="#2ec4b6" d="M42,58h7v5.5h-7zM50.5,58h7v5.5h-7zM59,58h7v5.5h-7zM42,65h7v5.5h-7zM50.5,65h7v5.5h-7zM59,65h7v5.5h-7z"/></svg>
+      </div>
+      <h1>Vintview</h1>
+      <p class="tag" data-i18n="tagline"></p>
+    </div>
+
+    <div id="updateCard" class="card update" hidden>
+      <div class="u-text">
+        <strong data-i18n="updateAvailable"></strong>
+        <span class="u-ver"></span>
+      </div>
+      <button class="btn small" id="btnUpdate" data-i18n="updateNow"></button>
+      <div class="progress" hidden><div></div></div>
+    </div>
+
+    <button id="btnOpen" class="btn primary big">
+      <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span data-i18n="openFile"></span>
+    </button>
+    <p class="formats" data-i18n="formats"></p>
+
+    <div id="recentWrap" hidden>
+      <div class="recent-head">
+        <h2 data-i18n="recent"></h2>
+        <button class="link" id="btnClearRecent" data-i18n="clear"></button>
+      </div>
+      <ul id="recent"></ul>
+    </div>
+
+    <footer class="home-foot">
+      <span id="verLabel"></span> · <button class="link" id="btnCheck" data-i18n="checkUpdates"></button>
+    </footer>
+  </section>
+
+  <section id="pdf" class="viewer" hidden>
+    <div class="scroller"><div class="pages"></div></div>
+    <button class="pageind" hidden></button>
+  </section>
+
+  <section id="sheet" class="viewer" hidden>
+    <div class="scroller"><table class="grid"></table></div>
+    <div class="cellbar" hidden><span class="addr"></span><div class="val"></div></div>
+    <nav class="tabs"></nav>
+  </section>
+
+  <div id="loading" hidden><div class="spinner"></div><div class="msg"></div></div>
+</main>
+
+<div id="scrim" hidden></div>
+<div id="menu" class="sheetmenu" hidden></div>
+<div id="dialog" class="dialog" hidden></div>
+<div id="toast" hidden></div>
+<input type="file" id="fileInput" hidden accept=".pdf,.xlsx,.xlsm,.xltx,.xlsb,.xls,.ods,.csv,.tsv">
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
