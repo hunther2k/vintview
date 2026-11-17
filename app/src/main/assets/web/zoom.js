@@ -3,7 +3,7 @@
 // das echte Neu-Layout auf und die Scrollposition wird so gesetzt, dass der
 // Punkt unter den Fingern an derselben Stelle bleibt.
 export function attachZoom(scroller, content, opts) {
-  const { get, apply, min, max, dbl } = opts;
+  const { get, apply, min, max, dbl } = opts;   // opts.reflow(): true = Inhalt bricht beim Zoomen neu um
   let pinch = null;
   let lastTap = 0, lastX = 0, lastY = 0;
 
@@ -19,6 +19,14 @@ export function attachZoom(scroller, content, opts) {
     const cx = scroller.scrollLeft + vx, cy = scroller.scrollTop + vy;
     // Inhalt links/oben vom Container (Ränder) nicht mitskalieren
     const ox = content.offsetLeft, oy = content.offsetTop;
+    if (opts.reflow?.()) {
+      // Text bricht neu um → Position anteilig halten
+      const ratio = cy / Math.max(1, scroller.scrollHeight);
+      apply(newZoom);
+      scroller.scrollLeft = 0;
+      scroller.scrollTop = ratio * scroller.scrollHeight - vy;
+      return;
+    }
     apply(newZoom);
     scroller.scrollLeft = (cx - ox) * k + ox - vx;
     scroller.scrollTop = (cy - oy) * k + oy - vy;
@@ -33,7 +41,9 @@ export function attachZoom(scroller, content, opts) {
         px: scroller.scrollLeft + m.x - content.offsetLeft,
         py: scroller.scrollTop + m.y - content.offsetTop,
       };
-      content.style.transformOrigin = `${pinch.px}px ${pinch.py}px`;
+      // Bei CSS-zoom am Inhalt liegen transform-origin-Werte im ungezoomten Maß
+      const cz = opts.cssZoom ? opts.cssZoom() : 1;
+      content.style.transformOrigin = `${pinch.px / cz}px ${pinch.py / cz}px`;
       content.style.willChange = 'transform';
       e.preventDefault();
     }

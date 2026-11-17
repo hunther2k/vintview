@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' blob: data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'">
 <title>Vintview</title>
 <link rel="stylesheet" href="app.css">
 </head>
@@ -16,6 +17,9 @@
     <div class="name">Vintview</div>
     <div class="sub"></div>
   </div>
+  <button id="btnPrint" class="icon" hidden data-i18n-title="print">
+    <svg viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>
+  </button>
   <button id="btnShare" class="icon" hidden data-i18n-title="share">
     <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
   </button>
@@ -74,6 +78,10 @@
     <nav class="tabs"></nav>
   </section>
 
+  <section id="doc" class="viewer" hidden>
+    <div class="scroller"><div class="docbody"></div></div>
+  </section>
+
   <div id="loading" hidden><div class="spinner"></div><div class="msg"></div></div>
 </main>
 
@@ -81,7 +89,7 @@
 <div id="menu" class="sheetmenu" hidden></div>
 <div id="dialog" class="dialog" hidden></div>
 <div id="toast" hidden></div>
-<input type="file" id="fileInput" hidden accept=".pdf,.xlsx,.xlsm,.xltx,.xlsb,.xls,.ods,.csv,.tsv">
+<input type="file" id="fileInput" hidden accept=".pdf,.xlsx,.xlsm,.xltx,.xlsb,.xls,.ods,.csv,.tsv,.docx,.docm,.dotx,.doc,.odt,.ott,.rtf,.txt,.md,.log,.json,.xml">
 
 <script type="module" src="app.js"></script>
 </body>

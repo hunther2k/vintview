@@ -1,27 +1,14 @@
 import { t, lang } from './i18n.js';
 import { attachZoom } from './zoom.js';
+import { xlsx as lib } from './libs.js';
+import { decodeText } from './plaintext.js';
+import { printPage } from './docview.js';
 
 const CHUNK = 400;   // Zeilen je Nachlade-Schritt
 const MAX_COLS = 400;
-
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = src; s.onload = res; s.onerror = () => rej(new Error('load ' + src));
-    document.head.appendChild(s);
-  });
-}
-async function lib() {
-  if (!window.XLSX) await loadScript(new URL('./lib/xlsx/xlsx.full.min.js', import.meta.url).href);
-  return window.XLSX;
-}
+const MAX_PRINT_ROWS = 10000;
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-function decodeText(u8) {
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(u8); }
-  catch { return new TextDecoder('windows-1252').decode(u8); }
-}
 
 export class SheetView {
   constructor(section, ui) {
@@ -267,6 +254,36 @@ export class SheetView {
       modified: p.ModifiedDate ? new Date(p.ModifiedDate).getTime() : null,
       producer: p.Application || '',
     };
+  }
+
+  /** Aktuelles Blatt als druckbares HTML (ohne Zeilen-/Spaltenköpfe, wie Excel). */
+  printHtml(title) {
+    const C = this.cur;
+    if (!C) return printPage(title, '', '');
+    const rows = C.rowsVis.slice(0, MAX_PRINT_ROWS);
+    let h = '<table>';
+    for (const r of rows) {
+      const row = C.data[r] || [];
+      h += '<tr>';
+      for (const c of C.colsVis) {
+        const key = r * 16384 + c;
+        if (C.covered.has(key)) continue;
+        const span = C.mStart.get(key);
+        const cell = row[c];
+        const cls = cell && (cell.t === 'n' || cell.t === 'd') ? ' class="n"' : '';
+        const sp = span ? (span[0] > 1 ? ` rowspan="${span[0]}"` : '') + (span[1] > 1 ? ` colspan="${span[1]}"` : '') : '';
+        h += `<td${sp}${cls}>${cell ? esc(this.text(cell)) : ''}</td>`;
+      }
+      h += '</tr>';
+    }
+    h += '</table>';
+    if (C.rowsVis.length > MAX_PRINT_ROWS) h += `<p class="cut">${esc(t('moreRows', { n: C.rowsVis.length - MAX_PRINT_ROWS }))}</p>`;
+    const name = this.list[C.k]?.name || '';
+    const head = this.list.length > 1 ? `<div class="sheetname">${esc(name)}</div>` : '';
+    return printPage(title,
+      'table{border-collapse:collapse;font-size:8.5pt}td{border:.5pt solid #999;padding:1.5pt 4pt;vertical-align:top;height:1.3em}' +
+      'td.n{text-align:right;white-space:nowrap}tr{break-inside:avoid}.sheetname{font-weight:bold;margin-bottom:4pt}.cut{color:#555}',
+      head + h);
   }
 
   close() {

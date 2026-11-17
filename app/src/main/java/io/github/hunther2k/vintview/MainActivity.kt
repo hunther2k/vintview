@@ -15,6 +15,9 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -46,6 +49,16 @@ class MainActivity : Activity() {
             "text/csv",
             "text/comma-separated-values",
             "text/tab-separated-values",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+            "application/vnd.ms-word.document.macroEnabled.12",
+            "application/msword",
+            "application/vnd.oasis.opendocument.text",
+            "application/vnd.oasis.opendocument.text-template",
+            "application/rtf",
+            "text/rtf",
+            "text/plain",
+            "text/markdown",
         )
     }
 
@@ -55,6 +68,7 @@ class MainActivity : Activity() {
     private val docs = ConcurrentHashMap<String, Doc>()
     private val nextId = AtomicInteger(1)
     private var pageReady = false
+    private var printWeb: WebView? = null
     private val pending = ArrayList<String>()
     lateinit var updater: Updater
 
@@ -279,6 +293,15 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun openRecent(uri: String) = openUri(Uri.parse(uri), persist = false, external = false)
 
+        /** Liste „Zuletzt geöffnet“ dauerhaft in den App-Einstellungen (robuster als WebView-Speicher). */
+        @JavascriptInterface
+        fun loadRecent(): String = getSharedPreferences("vintview", MODE_PRIVATE).getString("recent", "") ?: ""
+
+        @JavascriptInterface
+        fun saveRecent(json: String) {
+            getSharedPreferences("vintview", MODE_PRIVATE).edit().putString("recent", json).commit()
+        }
+
         @JavascriptInterface
         fun forgetRecent(uri: String) {
             try {
@@ -324,6 +347,46 @@ class MainActivity : Activity() {
                     toast(e.message ?: "Fehler")
                 }
             }
+        }
+
+        /** PDF unverändert an den Android-Druckdienst geben. */
+        @JavascriptInterface
+        fun printPdf(id: String, title: String) {
+            val doc = docs[id] ?: return
+            runOnUiThread {
+                try {
+                    val pm = getSystemService(PRINT_SERVICE) as PrintManager
+                    pm.print(title, PdfPrintAdapter(this@MainActivity, doc.uri, title), PrintAttributes.Builder().build())
+                } catch (e: Exception) {
+                    toast(e.message ?: "Fehler")
+                }
+            }
+        }
+
+        /** Druckfertiges HTML in einer unsichtbaren WebView setzen und drucken. */
+        @JavascriptInterface
+        fun printHtml(title: String, html: String) = runOnUiThread {
+            val w = WebView(this@MainActivity)
+            w.settings.javaScriptEnabled = false
+            w.settings.allowFileAccess = false
+            w.settings.allowContentAccess = false
+            w.settings.blockNetworkLoads = true
+            w.webViewClient = object : WebViewClient() {
+                private var done = false
+                override fun onPageFinished(view: WebView, url: String?) {
+                    if (done) return
+                    done = true
+                    try {
+                        val pm = getSystemService(PRINT_SERVICE) as PrintManager
+                        pm.print(title, view.createPrintDocumentAdapter(title), PrintAttributes.Builder().build())
+                    } catch (e: Exception) {
+                        toast(e.message ?: "Fehler")
+                    }
+                }
+            }
+            printWeb?.destroy()
+            printWeb = w   // Referenz halten, bis der nächste Druck kommt
+            w.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
         }
 
         @JavascriptInterface

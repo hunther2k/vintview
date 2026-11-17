@@ -1,6 +1,8 @@
 import { t, setLang, applyI18n, fmtSize, fmtDate, lang } from './i18n.js';
 import { PdfView } from './pdfview.js';
 import { SheetView } from './sheetview.js';
+import { DocView } from './docview.js';
+import { looksLikeText } from './plaintext.js';
 
 const A = window.Android || null;   // Brücke zur Android-App (fehlt im Browser)
 const $ = s => document.querySelector(s);
@@ -20,12 +22,16 @@ const ICON = {
   update: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>',
   about: '<svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/></svg>',
   star: '<svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>',
+  print: '<svg viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>',
+  view: '<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
 };
 
 const state = { doc: null, kind: null, meta: null, update: null, updState: 'idle' };
 const pdf = new PdfView($('#pdf'), { toast, goToPage });
 const sheet = new SheetView($('#sheet'), { toast });
+const docv = new DocView($('#doc'), { toast });
+const VIEWS = { pdf: '#pdf', sheet: '#sheet' };   // alle übrigen Arten → #doc
 
 // ---------------- Hilfen ----------------
 
@@ -93,10 +99,24 @@ function menu(items) {
 // ---------------- Zuletzt geöffnet ----------------
 
 function getRecent() {
-  try { return JSON.parse(localStorage.getItem('vv.recent') || '[]'); } catch { return []; }
+  try {
+    if (A?.loadRecent) {
+      const s = A.loadRecent();
+      if (s) return JSON.parse(s);
+      // einmalige Übernahme aus dem früheren WebView-Speicher
+      const old = localStorage.getItem('vv.recent');
+      if (old) { A.saveRecent(old); return JSON.parse(old); }
+      return [];
+    }
+    return JSON.parse(localStorage.getItem('vv.recent') || '[]');
+  } catch { return []; }
 }
 function setRecent(list) {
-  try { localStorage.setItem('vv.recent', JSON.stringify(list.slice(0, 20))); } catch {}
+  const json = JSON.stringify(list.slice(0, 20));
+  try {
+    if (A?.saveRecent) A.saveRecent(json);
+    else localStorage.setItem('vv.recent', json);
+  } catch {}
   renderRecent();
 }
 function addRecent(doc, kind) {
@@ -109,12 +129,20 @@ function removeRecent(uri, forget = true) {
   if (forget && A) A.forgetRecent(uri);
   setRecent(getRecent().filter(r => r.uri !== uri));
 }
+function badgeClass(kind) {
+  return kind === 'pdf' ? 'pdf' : kind === 'sheet' ? 'xls' : kind === 'text' ? 'txt' : 'doc';
+}
+function badgeText(r) {
+  if (r.kind === 'pdf') return 'PDF';
+  const ext = r.name.includes('.') ? r.name.split('.').pop().slice(0, 4).toUpperCase() : '';
+  return ext || { sheet: 'XLS', text: 'TXT' }[r.kind] || 'DOC';
+}
 function renderRecent() {
   const list = getRecent();
   $('#recentWrap').hidden = !list.length;
   $('#recent').innerHTML = list.map((r, i) => `
     <li data-i="${i}">
-      <span class="badge ${r.kind === 'pdf' ? 'pdf' : 'xls'}">${r.kind === 'pdf' ? 'PDF' : esc((r.name.split('.').pop() || 'XLS').slice(0, 4).toUpperCase())}</span>
+      <span class="badge ${badgeClass(r.kind)}">${esc(badgeText(r))}</span>
       <div class="meta"><div class="fname">${esc(r.name)}</div><div class="info">${esc(fmtDate(r.ts))}${r.size > 0 ? ' · ' + esc(fmtSize(r.size)) : ''}</div></div>
       <button class="rm" data-rm="${i}" aria-label="x">${ICON.x}</button>
     </li>`).join('');
@@ -133,15 +161,44 @@ $('#btnClearRecent').addEventListener('click', () => {
 
 // ---------------- Dokument öffnen ----------------
 
+const EXT = {
+  docx: ['docx', 'docm', 'dotx', 'dotm'],
+  odt: ['odt', 'ott'],
+  sheet: ['xlsx', 'xlsm', 'xltx', 'xltm', 'xlsb', 'xls', 'xlt', 'ods', 'ots', 'fods'],
+  doc: ['doc', 'dot'],
+  text: ['txt', 'text', 'md', 'markdown', 'log', 'json', 'xml', 'ini', 'cfg', 'conf', 'yml', 'yaml', 'sql', 'nfo', 'srt', 'vcf', 'ics'],
+};
+const latin1 = u8 => new TextDecoder('latin1').decode(u8);
+const encrypted = () => Object.assign(new Error('encrypted'), { code: 'encrypted' });
+
 function kindOf(u8, name, mime) {
-  const head = new TextDecoder('latin1').decode(u8.subarray(0, 1024));
-  if (head.includes('%PDF-')) return 'pdf';
-  if ((mime || '').includes('pdf')) return 'pdf';
+  const head = latin1(u8.subarray(0, 1024));
   const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-  if (['xlsx', 'xlsm', 'xltx', 'xltm', 'xlsb', 'xls', 'ods', 'fods', 'csv', 'tsv', 'txt'].includes(ext)) return 'sheet';
-  if (u8[0] === 0x50 && u8[1] === 0x4b) return 'sheet';
-  if (u8[0] === 0xd0 && u8[1] === 0xcf) return 'sheet';
-  if (/sheet|excel|csv|spreadsheet|tab-separated/.test(mime || '')) return 'sheet';
+  const m = mime || '';
+  if (head.includes('%PDF-')) return 'pdf';
+  if (head.startsWith('{\\rtf')) return 'rtf';
+  if (u8[0] === 0x50 && u8[1] === 0x4b) {            // ZIP: OOXML / OpenDocument
+    const mt = head.slice(30, 110);
+    if (mt.startsWith('mimetypeapplication/vnd.oasis.opendocument.text')) return 'odt';
+    if (mt.startsWith('mimetypeapplication/vnd.oasis.opendocument.spreadsheet')) return 'sheet';
+    if (EXT.docx.includes(ext) || /wordprocessingml|ms-word/.test(m)) return 'docx';
+    if (EXT.odt.includes(ext) || /opendocument\.text/.test(m)) return 'odt';
+    if (EXT.sheet.includes(ext) || /sheet|excel/.test(m)) return 'sheet';
+    const tail = latin1(u8.subarray(Math.max(0, u8.length - 65536)));
+    if (tail.includes('word/document.xml')) return 'docx';
+    if (tail.includes('xl/workbook')) return 'sheet';
+    return null;
+  }
+  if (u8[0] === 0xd0 && u8[1] === 0xcf && u8[2] === 0x11 && u8[3] === 0xe0) {   // altes Office-Format
+    const all = latin1(u8.length > 4e6 ? u8.subarray(0, 4e6) : u8);
+    if (all.includes('E\0n\0c\0r\0y\0p\0t\0e\0d\0P\0a\0c\0k\0a\0g\0e')) throw encrypted();
+    if (EXT.doc.includes(ext) || /msword/.test(m) || all.includes('W\0o\0r\0d\0D\0o\0c\0u\0m\0e\0n\0t')) return 'doc';
+    return 'sheet';
+  }
+  if (['csv', 'tsv'].includes(ext) || /csv|tab-separated/.test(m)) return 'sheet';
+  if (EXT.text.includes(ext) || /^text\/(plain|markdown|x-)/.test(m) || /json|xml/.test(m)) return 'text';
+  if (EXT.sheet.includes(ext) || /sheet|excel/.test(m)) return 'sheet';
+  if (looksLikeText(u8)) return 'text';
   return null;
 }
 
@@ -157,29 +214,34 @@ async function openDoc(doc) {
     if (!kind) throw Object.assign(new Error('format'), { code: 'format' });
     closeDoc();
     let sub;
+    $(VIEWS[kind] || '#doc').hidden = false;
     if (kind === 'pdf') {
-      $('#pdf').hidden = false;
       const r = await pdf.open(u8, askPassword);
       sub = r.pages === 1 ? t('page1') : t('pages', { n: r.pages });
-    } else {
-      $('#sheet').hidden = false;
+    } else if (kind === 'sheet') {
       const r = await sheet.open(buf, doc.name, doc.mime);
       sub = r.sheets === 1 ? t('sheet1') : t('sheets', { n: r.sheets });
+    } else {
+      sub = (await docv.open(buf, kind)).sub;
     }
     state.doc = doc;
     state.kind = kind;
     $('#home').hidden = true;
     $('#title .name').textContent = doc.name;
-    $('#title .sub').textContent = [kind === 'pdf' ? 'PDF' : (doc.name.split('.').pop() || '').toUpperCase(), sub, doc.size > 0 ? fmtSize(doc.size) : ''].filter(Boolean).join(' · ');
+    const ext = doc.name.includes('.') ? doc.name.split('.').pop().toUpperCase() : kind.toUpperCase();
+    $('#title .sub').textContent = [kind === 'pdf' ? 'PDF' : ext, sub, doc.size > 0 ? fmtSize(doc.size) : ''].filter(Boolean).join(' · ');
     $('#btnBack').hidden = false;
     $('#btnShare').hidden = !A || !doc.id;
+    $('#btnPrint').hidden = !A;
     addRecent(doc, kind);
   } catch (e) {
     console.error(e);
     closeDoc();
     goHome();
     if (e?.name === 'PasswordException') return;
-    toast(e?.code === 'format' ? t('errFormat') : /password|encrypt/i.test(e?.message || '') ? t('passwordTitle') + ' – ' + t('errOpen') : t('errOpen'));
+    toast(e?.code === 'format' ? t('errFormat')
+      : e?.code === 'encrypted' || /password|encrypt/i.test(e?.message || '') ? t('errEncrypted')
+      : t('errOpen'), 3500);
   } finally {
     loading(false);
     if (doc.url.startsWith('blob:')) URL.revokeObjectURL(doc.url);
@@ -201,8 +263,10 @@ async function askPassword(wrong) {
 function closeDoc() {
   pdf.close();
   sheet.close();
+  docv.close();
   $('#pdf').hidden = true;
   $('#sheet').hidden = true;
+  $('#doc').hidden = true;
   state.doc = null;
   state.kind = null;
 }
@@ -214,6 +278,7 @@ function goHome() {
   $('#title .sub').textContent = '';
   $('#btnBack').hidden = true;
   $('#btnShare').hidden = true;
+  $('#btnPrint').hidden = true;
   renderRecent();
 }
 
@@ -242,7 +307,7 @@ async function goToPage() {
 async function showInfo() {
   const d = state.doc;
   if (!d) return;
-  const m = state.kind === 'pdf' ? await pdf.info() : sheet.info();
+  const m = state.kind === 'pdf' ? await pdf.info() : state.kind === 'sheet' ? sheet.info() : docv.info();
   const rows = [
     [t('name'), d.name],
     [t('type'), $('#title .sub').textContent],
@@ -259,6 +324,24 @@ async function showInfo() {
     actions: [{ label: t('close'), value: null, primary: true }],
   });
 }
+
+async function printDoc() {
+  const d = state.doc;
+  if (!d) return;
+  if (!A) { window.print(); return; }
+  if (state.kind === 'pdf') { A.printPdf(d.id, d.name); return; }
+  loading(true, t('printing'));
+  try {
+    const html = state.kind === 'sheet' ? sheet.printHtml(d.name) : await docv.printHtml(d.name);
+    A.printHtml(d.name, html);
+  } catch (e) {
+    console.error(e);
+    toast(t('printFail'));
+  } finally {
+    loading(false);
+  }
+}
+$('#btnPrint').addEventListener('click', printDoc);
 
 function showDefaultHelp() {
   dialog({
@@ -333,6 +416,10 @@ $('#btnShare').addEventListener('click', () => state.doc?.id && A.share(state.do
 $('#btnMenu').addEventListener('click', () => {
   const items = [];
   if (state.doc) {
+    if (A) items.push({ icon: ICON.print, label: t('print'), run: printDoc });
+    if (docv.kind && docv.canToggleMode()) {
+      items.push({ icon: ICON.view, label: docv.reflow ? t('viewPage') : t('viewRead'), run: async () => { loading(true); try { await docv.toggleMode(); } finally { loading(false); } } });
+    }
     if (A && state.doc.id) items.push({ icon: ICON.openWith, label: t('openWith'), run: () => A.openWith(state.doc.id) });
     if (state.kind === 'pdf' && pdf.pages.length > 1) items.push({ icon: ICON.page, label: t('goToPage'), run: goToPage });
     items.push({ icon: ICON.info, label: t('fileInfo'), run: showInfo });
