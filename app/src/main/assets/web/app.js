@@ -292,7 +292,7 @@ async function showUpdate() {
   if (!u) return;
   const ok = await dialog({
     title: t('updateTitle', { v: u.version }),
-    html: (u.notes ? `<div class="notes">${esc(u.notes)}</div>` : '') + (u.size > 0 ? `<p class="small" style="margin-top:10px">${esc(fmtSize(u.size))}</p>` : ''),
+    html: (u.notes?.trim() ? `<div class="notes">${esc(u.notes.trim())}</div>` : '') + (u.size > 0 ? `<p class="small" style="margin-top:10px">${esc(fmtSize(u.size))}</p>` : ''),
     actions: [{ label: t('updateLater'), value: false }, { label: t('updateInstall'), value: true, primary: true }],
   });
   if (ok) startUpdate();
